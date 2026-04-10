@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cloudmesh-ai-speedtest"
+
+dynamic = ["version"]
+description = "Extension speedtest created by CME"
+license = {text = "Apache-2.0"}
+dependencies = [
+    "click",
+    "rich",
+]
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
+
+[project.entry-points."cloudmesh.ai.extension"]
+speedtest = "extension.speedtest:register"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["extension*"]
