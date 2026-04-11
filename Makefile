@@ -1,12 +1,12 @@
 ######################################################################
-# Cloudmesh CMA Makefile
+# Cloudmesh Speedtest Makefile
 ######################################################################
 
 # Variables
 PYTHON       := python
 PIP          := pip
 PACKAGE_NAME := $(shell basename $(CURDIR))
-COMMAND_NAME := cma
+COMMAND_NAME := cmc
 TWINE        := $(PYTHON) -m twine
 VERSION_FILE := VERSION
 GIT          := git
@@ -15,7 +15,9 @@ GIT          := git
         check version patch tag release test test-cov setup-test uninstall-all
 
 help:
-	@echo "Cloudmesh CMA Management Commands:"
+	@echo
+	@echo "Makefile for the Speedtest Cloudmesh extension:"
+	@echo
 	@echo "  version       - Display current version from $(VERSION_FILE)"
 	@echo "  patch V=x.y.z - Update version in $(VERSION_FILE) (e.g., V=4.0.1.dev1)"
 	@echo "  install       - Install in editable mode for local development"
@@ -25,36 +27,30 @@ help:
 	@echo "  check         - Build and validate metadata/README"
 	@echo "  test          - Run pytest suite"
 	@echo "  test-cov      - Run pytest with coverage report"
-	@echo "  setup-test    - Install test deps and generate test files"
+	@echo "  setup-test    - Install test deps"
 	@echo "  test-upload   - Build, check, and upload to TestPyPI"
 	@echo "  test-install  - Uninstall local and install from TestPyPI"
 	@echo "  upload        - Build, check, and upload to Production PyPI"
 	@echo "  tag           - Create a git tag based on current version and push"
 	@echo "  release       - Full Production Cycle: upload + tag"
+	@echo
 
 # --- VERSION MANAGEMENT ---
 
 version:
-	@VERSION=$$(cat $(VERSION_FILE)); \
-	BASE=$$(echo $$VERSION | cut -d'.' -f1-3); \
-	DEV=$$(echo $$VERSION | grep -o "dev[0-9]*$$" | sed 's/dev//' || echo "0"); \
-	NEXT_PATCH=$$(echo $$BASE | awk -F. '{print $$1"."$$2"."$$3+1}'); \
-	NEXT_DEV=$$(echo $$BASE | awk -F. -v d=$$DEV '{print $$1"."$$2"."$$3".dev"d+1}'); \
-	echo "Current:   $$VERSION"; \
-	echo "Suggested Next Steps:"; \
-	echo "  Release:   make patch V=$$BASE"; \
-	echo "  Patch:     make patch V=$$NEXT_PATCH"; \
-	echo "  Dev:     make patch V=$$NEXT_DEV"
+	$(PYTHON) bin/version_mgmt.py version
 
 patch:
 	@if [ -z "$(V)" ]; then echo "Usage: make patch V=4.0.1.dev1"; exit 1; fi
-	@echo "$(V)" > $(VERSION_FILE)
-	@echo "Version updated to $(V) in $(VERSION_FILE)"
+	$(PYTHON) bin/version_mgmt.py patch $(V)
 
 # --- DEVELOPMENT & TESTING ---
 
 install:
 	$(PIP) install -e .
+
+requirements:
+	pip-compile --output-file=requirements.txt pyproject.toml
 
 test:
 	pytest -v tests/
@@ -64,8 +60,6 @@ test-cov:
 
 setup-test:
 	$(PIP) install pytest pytest-mock pytest-cov
-	chmod +x setup_tests.sh
-	./setup_tests.sh
 
 # --- BUILD AND VALIDATE ---
 
@@ -87,7 +81,7 @@ test-install:
 	@echo "Removing local version to ensure fresh test..."
 	-$(PIP) uninstall -y $(PACKAGE_NAME)
 	@echo "Installing latest version from TestPyPI..."
-	$(PIP) install --no-cache-dir --upgrade \
+	cd /tmp && $(PIP) install --no-cache-dir --upgrade --force-reinstall --ignore-installed \
 				  --index-url https://test.pypi.org/simple/ \
 				  --extra-index-url https://pypi.org/simple/ \
 				  --pre $(PACKAGE_NAME)
