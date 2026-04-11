@@ -1,0 +1,127 @@
+######################################################################
+# Cloudmesh CMA Makefile
+######################################################################
+
+# Variables
+PYTHON       := python
+PIP          := pip
+PACKAGE_NAME := $(shell basename $(CURDIR))
+COMMAND_NAME := cma
+TWINE        := $(PYTHON) -m twine
+VERSION_FILE := VERSION
+GIT          := git
+
+.PHONY: help install clean build upload test-upload test-install reinstall \
+        check version patch tag release test test-cov setup-test uninstall-all
+
+help:
+	@echo "Cloudmesh CMA Management Commands:"
+	@echo "  version       - Display current version from $(VERSION_FILE)"
+	@echo "  patch V=x.y.z - Update version in $(VERSION_FILE) (e.g., V=4.0.1.dev1)"
+	@echo "  install       - Install in editable mode for local development"
+	@echo "  reinstall     - Clean and reinstall locally"
+	@echo "  clean         - Remove build artifacts, cache, and test debris"
+	@echo "  build         - Build distributions (sdist and wheel)"
+	@echo "  check         - Build and validate metadata/README"
+	@echo "  test          - Run pytest suite"
+	@echo "  test-cov      - Run pytest with coverage report"
+	@echo "  setup-test    - Install test deps and generate test files"
+	@echo "  test-upload   - Build, check, and upload to TestPyPI"
+	@echo "  test-install  - Uninstall local and install from TestPyPI"
+	@echo "  upload        - Build, check, and upload to Production PyPI"
+	@echo "  tag           - Create a git tag based on current version and push"
+	@echo "  release       - Full Production Cycle: upload + tag"
+
+# --- VERSION MANAGEMENT ---
+
+version:
+	@VERSION=$$(cat $(VERSION_FILE)); \
+	BASE=$$(echo $$VERSION | cut -d'.' -f1-3); \
+	DEV=$$(echo $$VERSION | grep -o "dev[0-9]*$$" | sed 's/dev//' || echo "0"); \
+	NEXT_PATCH=$$(echo $$BASE | awk -F. '{print $$1"."$$2"."$$3+1}'); \
+	NEXT_DEV=$$(echo $$BASE | awk -F. -v d=$$DEV '{print $$1"."$$2"."$$3".dev"d+1}'); \
+	echo "Current:   $$VERSION"; \
+	echo "Suggested Next Steps:"; \
+	echo "  Release:   make patch V=$$BASE"; \
+	echo "  Patch:     make patch V=$$NEXT_PATCH"; \
+	echo "  Dev:     make patch V=$$NEXT_DEV"
+
+patch:
+	@if [ -z "$(V)" ]; then echo "Usage: make patch V=4.0.1.dev1"; exit 1; fi
+	@echo "$(V)" > $(VERSION_FILE)
+	@echo "Version updated to $(V) in $(VERSION_FILE)"
+
+# --- DEVELOPMENT & TESTING ---
+
+install:
+	$(PIP) install -e .
+
+test:
+	pytest -v tests/
+
+test-cov:
+	pytest --cov=cloudmesh.ai.extension.speedtest --cov-report=term-missing tests/
+
+setup-test:
+	$(PIP) install pytest pytest-mock pytest-cov
+	chmod +x setup_tests.sh
+	./setup_tests.sh
+
+# --- BUILD AND VALIDATE ---
+
+build: clean
+	@echo "Building distributions..."
+	$(PYTHON) -m build
+
+check: build
+	@echo "Validating distribution metadata..."
+	$(TWINE) check dist/*
+
+# --- TEST PYPI (SANDBOX) ---
+
+test-upload: check
+	@echo "Uploading to TestPyPI..."
+	$(TWINE) upload --repository testpypi dist/*
+
+test-install:
+	@echo "Removing local version to ensure fresh test..."
+	-$(PIP) uninstall -y $(PACKAGE_NAME)
+	@echo "Installing latest version from TestPyPI..."
+	$(PIP) install --no-cache-dir --upgrade \
+				  --index-url https://test.pypi.org/simple/ \
+				  --extra-index-url https://pypi.org/simple/ \
+				  --pre $(PACKAGE_NAME)
+	@echo "\nVerification: Running '$(COMMAND_NAME) version'..."
+	$(COMMAND_NAME) version
+
+# --- PRODUCTION AND TAGGING ---
+
+upload: check
+	@echo "Uploading to Production PyPI..."
+	$(TWINE) upload dist/*
+
+tag:
+	@VERSION=$$(cat $(VERSION_FILE)); \
+	echo "Tagging version v$$VERSION..."; \
+	$(GIT) tag -a v$$VERSION -m "Release v$$VERSION"; \
+	$(GIT) push origin v$$VERSION
+
+release: upload tag
+	@echo "Production release and tagging complete."
+
+# --- CLEANUP & REINSTALL ---
+
+uninstall-all:
+	@echo "Searching for installed cloudmesh-ai packages..."
+	@$(PIP) freeze | grep "cloudmesh-ai" | cut -d'=' -f1 | xargs $(PIP) uninstall -y || echo "No cloudmesh-ai packages found."
+
+clean:
+	@echo "Cleaning artifacts and temporary test plugins..."
+	rm -rf build/ dist/ *.egg-info .pytest_cache .coverage
+	find . -type d -name "__pycache__" -exec rm -rf {} +
+	find . -type f -name "*.pyc" -delete
+	rm -rf tmp/cloudmesh-ai-*
+
+reinstall: uninstall-all clean
+	@echo "Performing fresh install..."
+	$(PIP) install -e .

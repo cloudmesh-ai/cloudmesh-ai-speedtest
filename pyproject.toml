@@ -7,7 +7,7 @@ name = "cloudmesh-ai-speedtest"
 
 dynamic = ["version"]
 description = "Extension speedtest created by CME"
-license = {text = "Apache-2.0"}
+license = "Apache-2.0"
 dependencies = [
     "click",
     "rich",

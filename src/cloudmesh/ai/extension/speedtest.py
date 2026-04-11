@@ -287,5 +287,7 @@ def predict_cmd(host, path, copy_method):
     console.print("\n", table)
 
 
+entry_point = speedtest_group
+
 def register(cli):
     cli.add_command(speedtest_group, name="speedtest")
