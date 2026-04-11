@@ -56,7 +56,7 @@ test:
 	pytest -v tests/
 
 test-cov:
-	pytest --cov=cloudmesh.ai.extension.speedtest --cov-report=term-missing tests/
+	pytest --cov=cloudmesh.ai.command.speedtest --cov-report=term-missing tests/
 
 setup-test:
 	$(PIP) install pytest pytest-mock pytest-cov

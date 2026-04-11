@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 from click.testing import CliRunner
 
-from cloudmesh.ai.extension.speedtest import (
+from cloudmesh.ai.command.speedtest import (
     speedtest_group, 
     get_path_size_mb, 
     format_hms
@@ -19,7 +19,7 @@ def runner():
 def mock_history_path(tmp_path, monkeypatch):
     """Mocks the history file path to a temporary directory."""
     fake_config = tmp_path / "speedtest.json"
-    monkeypatch.setattr("cloudmesh.ai.extension.speedtest.get_history_path", lambda: fake_config)
+    monkeypatch.setattr("cloudmesh.ai.command.speedtest.get_history_path", lambda: fake_config)
     return fake_config
 
 # --- Helper Function Tests ---
@@ -53,7 +53,7 @@ def test_get_path_size_mb(tmp_path):
 def test_run_command_success(runner, mock_history_path):
     """Test that 'run' command calculates speed and saves to history."""
     with patch("subprocess.run") as mock_run, \
-         patch("cloudmesh.ai.extension.speedtest.generate_fast_dummy_file"):
+         patch("cloudmesh.ai.command.speedtest.generate_fast_dummy_file"):
         
         # Mock subprocess.run to return success for both transfer and cleanup
         mock_run.return_value = MagicMock(returncode=0)
@@ -73,7 +73,7 @@ def test_run_command_success(runner, mock_history_path):
 def test_run_command_failure(runner, mock_history_path):
     """Test that 'run' command handles subprocess errors."""
     with patch("subprocess.run") as mock_run, \
-         patch("cloudmesh.ai.extension.speedtest.generate_fast_dummy_file"):
+         patch("cloudmesh.ai.command.speedtest.generate_fast_dummy_file"):
         
         # Simulate a failure (e.g., SSH timeout)
         mock_run.side_effect = Exception("SSH Connection Timeout")

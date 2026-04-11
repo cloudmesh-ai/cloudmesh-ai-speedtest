@@ -3,8 +3,8 @@ import os
 import sys
 
 # Get the absolute path to the speedtest module
-module_path = os.path.join(os.path.dirname(__file__), "src", "cloudmesh", "ai", "extension", "speedtest.py")
-module_name = "cloudmesh.ai.extension.speedtest"
+module_path = os.path.join(os.path.dirname(__file__), "src", "cloudmesh", "ai", "command", "speedtest.py")
+module_name = "cloudmesh.ai.command.speedtest"
 
 # Load the module directly from the file path
 spec = importlib.util.spec_from_file_location(module_name, module_path)
