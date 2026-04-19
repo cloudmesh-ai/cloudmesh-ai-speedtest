@@ -4,15 +4,17 @@
 
 # Variables
 PYTHON       := python
-PIP          := pip
+PIP          := $(PYTHON) -m pip
 PACKAGE_NAME := $(shell basename $(CURDIR))
 COMMAND_NAME := cmc
 TWINE        := $(PYTHON) -m twine
 VERSION_FILE := VERSION
 GIT          := git
+PYENVVERSION := $(shell pyenv version-name)
 
 .PHONY: help install clean build upload test-upload test-install reinstall \
-        check version patch tag release test test-cov setup-test uninstall-all
+        check version patch tag release test test-cov setup-test uninstall-all \
+        tmp-setup
 
 help:
 	@echo
@@ -77,11 +79,14 @@ test-upload: check
 	@echo "Uploading to TestPyPI..."
 	$(TWINE) upload --repository testpypi dist/*
 
-test-install:
+tmp-setup:
+	cd /tmp && pyenv local $$(pyenv global)
+
+test-install: tmp-setup
 	@echo "Removing local version to ensure fresh test..."
 	-$(PIP) uninstall -y $(PACKAGE_NAME)
 	@echo "Installing latest version from TestPyPI..."
-	cd /tmp && $(PIP) install --no-cache-dir --upgrade --force-reinstall --ignore-installed \
+	cd /tmp && pyenv exec $(PYTHON) -m pip install --no-cache-dir --upgrade --force-reinstall --ignore-installed \
 				  --index-url https://test.pypi.org/simple/ \
 				  --extra-index-url https://pypi.org/simple/ \
 				  --pre $(PACKAGE_NAME)
