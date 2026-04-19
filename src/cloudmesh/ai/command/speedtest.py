@@ -36,6 +36,12 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from cloudmesh.ai.common.stopwatch import StopWatch
+from cloudmesh.ai.common.logging import get_logger
+from cloudmesh.ai.common.io import path_expand
+from cloudmesh.ai.common.sys import systeminfo
+from cloudmesh.ai.common.telemetry import Telemetry
+
 # Import Rich components for the table
 from rich.console import Console
 from rich.table import Table
@@ -44,12 +50,38 @@ from rich import box
 # Initialize Rich console
 console = Console()
 
+# Initialize Logger
+logger = get_logger("speedtest")
+
+# Initialize Telemetry
+telemetry = Telemetry("speedtest")
+
 # --- Helpers ---
 
 
+def load_config():
+    """Loads the general AI configuration file."""
+    config_path = Path(path_expand("~/.config/cloudmesh/ai/config.json"))
+    if config_path.exists():
+        try:
+            with open(config_path, "r") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
 def get_history_path():
-    """Returns the path to the speedtest history file."""
-    path = Path("~/.config/cloudmesh/ai/speedtest.json").expanduser()
+    """Returns the path to the speedtest history file based on config."""
+    config = load_config()
+    # Use filename from config if available, otherwise default to speedtest.json
+    filename = config.get("speedtest_history", "speedtest.json")
+    
+    # Ensure the file is placed in the standard AI config directory
+    base_dir = "~/.config/cloudmesh/ai/"
+    path_str = path_expand(f"{base_dir}{filename}")
+    
+    path = Path(path_str)
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -135,10 +167,15 @@ def run_cmd(host, size, user, copy_method):
     ssh_opts = ["-o", "ConnectTimeout=5", "-o", "BatchMode=yes"]
 
     try:
-        click.echo(f"Generating {size}MB test data...")
+        try:
+            telemetry.start(message=f"Running speedtest to {host} via {copy_method}")
+        except Exception as te:
+            logger.debug(f"Telemetry start failed: {te}")
+
+        logger.info(f"Generating {size}MB test data...")
         generate_fast_dummy_file(test_file, size)
 
-        click.echo(f"Transferring to {host} via {copy_method}...")
+        logger.info(f"Transferring to {host} via {copy_method}...")
 
         if copy_method == "scp":
             cmd = ["scp"] + ssh_opts + [str(test_file), f"{target}:{remote_path}"]
@@ -157,16 +194,33 @@ def run_cmd(host, size, user, copy_method):
             batch_file.write_text(f"put {test_file} {remote_path}\nquit\n")
             cmd = ["sftp"] + ssh_opts + ["-b", str(batch_file), target]
 
-        start_time_perf = time.perf_counter()
+        StopWatch.start("transfer")
         start_time_iso = datetime.now().isoformat()
 
         subprocess.run(cmd, check=True, capture_output=True, text=True)
 
-        duration = time.perf_counter() - start_time_perf
-        speed_mbytes = size / duration
-        speed_mbits = (size * 8) / duration
+        StopWatch.stop("transfer")
+        duration = StopWatch.get("transfer")
+        
+        # Guard against division by zero in fast/mocked environments
+        safe_duration = max(duration, 0.0001)
+        speed_mbytes = size / safe_duration
+        speed_mbits = (size * 8) / safe_duration
         proj_1gb_total_seconds = 1024 / speed_mbytes
         time_breakdown = format_hms(proj_1gb_total_seconds)
+
+        # Record telemetry
+        try:
+            telemetry.complete(metrics={
+                "speed_mbytes": speed_mbytes,
+                "speed_mbits": speed_mbits,
+                "duration": duration,
+                "size_mb": size,
+                "host": host,
+                "method": copy_method
+            })
+        except Exception as te:
+            logger.debug(f"Telemetry complete failed: {te}")
 
         history_file = get_history_path()
         history = {}
@@ -178,11 +232,16 @@ def run_cmd(host, size, user, copy_method):
                 history = {}
 
         history_key = f"{host}:{copy_method}"
+        # Ensure systeminfo is JSON serializable by converting values to strings
+        sys_info = systeminfo()
+        serializable_sys_info = {k: str(v) for k, v in sys_info.items()} if sys_info else {}
+
         history[history_key] = {
             "speed_mbytes": speed_mbytes,
             "target_full": target,
             "method": copy_method,
             "timestamp": start_time_iso,
+            "system": serializable_sys_info,
         }
         with open(history_file, "w") as f:
             json.dump(history, f, indent=4)
@@ -215,6 +274,10 @@ def run_cmd(host, size, user, copy_method):
             Path("sftp_batch.txt").unlink()
 
     except Exception as e:
+        try:
+            telemetry.fail(error=str(e))
+        except Exception as te:
+            logger.debug(f"Telemetry fail failed: {te}")
         click.secho(f"Execution failed: {e}", fg="red")
     finally:
         if test_file.exists():
