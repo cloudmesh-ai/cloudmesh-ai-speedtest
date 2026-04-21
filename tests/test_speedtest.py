@@ -119,3 +119,39 @@ def test_predict_command_success(runner, mock_history_path, tmp_path):
     assert "5.00 MB" in result.output
     # 5MB / 10MB/s = 0.5s
     assert "0.50s" in result.output
+
+def test_internet_command_not_installed(runner):
+    """Test internet command when speedtest CLI is not installed."""
+    with patch("shutil.which", return_value=None):
+        result = runner.invoke(speedtest_group, ["internet"])
+        assert "Error: Ookla speedtest CLI is not installed" in result.output
+        assert "brew install speedtest --force" in result.output
+        assert "https://www.speedtest.net/apps/cli" in result.output
+
+def test_internet_command_installed_declined(runner):
+    """Test internet command when installed but user declines."""
+    with patch("shutil.which", return_value="/usr/local/bin/speedtest"), \
+         patch("click.confirm", return_value=False):
+        result = runner.invoke(speedtest_group, ["internet"])
+        assert "Speedtest cancelled" in result.output
+
+def test_internet_command_installed_accepted(runner):
+    """Test internet command when installed and user accepts."""
+    with patch("shutil.which", return_value="/usr/local/bin/speedtest"), \
+         patch("click.confirm", return_value=True), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        result = runner.invoke(speedtest_group, ["internet"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once_with(["speedtest"], capture_output=False, text=True)
+
+def test_internet_command_yes_flag(runner):
+    """Test internet command with -y flag bypasses confirmation."""
+    with patch("shutil.which", return_value="/usr/local/bin/speedtest"), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        # Use -y flag
+        result = runner.invoke(speedtest_group, ["internet", "-y"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once_with(["speedtest"], capture_output=False, text=True)
+

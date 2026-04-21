@@ -24,6 +24,47 @@ Usage Examples:
 
 4. Predict how long it will take to upload a folder based on previous SCP tests:
    $ cme speedtest predict my-server.com --path=/home/user/data --copy=scp
+
+Sample Output (run):
+-------------------------------------------------------------------------------
+┌────────────────────────────────────────────────────────────────────────────┐
+│                          Speedtest Results: my-server.com (SCP)            │
+├──────────────────┬─────────────────────────────────────────────────────────┤
+│ Metric           │ Value                                                   │
+├──────────────────┼─────────────────────────────────────────────────────────┤
+│ Method           │ SCP                                                     │
+│ Sample Size      │ 50 MB                                                   │
+│ Throughput       │ 125.50 MB/s (1004.00 Mbps)                               │
+│ Projected 1GB    │ 8.16s (8s)                                              │
+└──────────────────┴─────────────────────────────────────────────────────────┘
+
+Sample Output (predict):
+-------------------------------------------------------------------------------
+┌────────────────────────────────────────────────────────────────────────────┐
+│                      Transfer Prediction for my-server.com (SCP)           │
+├──────────────────┬─────────────────────────────────────────────────────────┤
+│ Parameter        │ Value                                                   │
+├──────────────────┼─────────────────────────────────────────────────────────┤
+│ Source Path      │ /home/user/data                                         │
+│ Total Size       │ 1024.00 MB                                              │
+│ Stored Speed     │ 125.50 MB/s                                             │
+│ Estimated Time   │ 8.16s (8s)                                              │
+└──────────────────┴─────────────────────────────────────────────────────────┘
+
+Usage:
+    speedtest run <host> [options]
+    speedtest predict <host> --path <path> [options]
+    speedtest -h | --help
+
+Arguments:
+    <host>             Remote host to test or predict for.
+    <path>             Local path to analyze for size prediction.
+
+Options:
+    --size <mb>        Size of test file to generate in MB (default: 50).
+    --user <user>      SSH username to use.
+    --copy <method>    Protocol to use (scp, sftp, rsync).
+    -h, --help         Show this screen.
 -------------------------------------------------------------------------------
 """
 
@@ -31,6 +72,7 @@ import os
 import json
 import math
 import subprocess
+import shutil
 import click
 import time
 from datetime import datetime
@@ -135,6 +177,36 @@ def speedtest_group():
     """
     pass
 
+@speedtest_group.command(name="internet")
+@click.option("-y", "--yes", is_flag=True, help="Automatically answer yes to the confirmation prompt.")
+def internet_cmd(yes):
+    """
+    Conduct an internet speed test using the Ookla speedtest CLI.
+    """
+    if shutil.which("speedtest") is None:
+        click.secho("\nError: Ookla speedtest CLI is not installed.", fg="red")
+        click.echo("\nTo install it, run the following commands:")
+        click.echo("--------------------------------------------------")
+        click.echo("brew tap teamookla/speedtest")
+        click.echo("brew update")
+        click.echo("# brew uninstall speedtest --force")
+        click.echo("# brew uninstall speedtest-cli --force")
+        click.echo("brew install speedtest --force")
+        click.echo("--------------------------------------------------")
+        click.echo("\nFor more information, visit: https://www.speedtest.net/apps/cli")
+        return
+
+    if yes or click.confirm("\nWould you like to conduct the speedtest with the Ookla program?", default=False):
+        try:
+            # Run speedtest and stream output to console
+            result = subprocess.run(["speedtest"], capture_output=False, text=True)
+            if result.returncode != 0:
+                click.secho(f"\nSpeedtest failed with exit code {result.returncode}", fg="red")
+        except Exception as e:
+            click.secho(f"\nAn error occurred while running speedtest: {e}", fg="red")
+    else:
+        click.echo("\nSpeedtest cancelled.")
+
 
 @speedtest_group.command(name="run")  # Changed from 'ssh' to 'run'
 @click.argument("host")
@@ -160,6 +232,7 @@ def run_cmd(host, size, user, copy_method):
     Example:
         cme speedtest run 192.168.1.10 --copy=rsync --size=100
     """
+    
     target = f"{user}@{host}" if user else host
     test_file = Path("speedtest_dummy.bin")
     remote_path = f"/tmp/{test_file.name}"
