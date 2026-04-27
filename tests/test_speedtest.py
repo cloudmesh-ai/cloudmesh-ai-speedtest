@@ -124,7 +124,7 @@ def test_internet_command_not_installed(runner):
     """Test internet command when speedtest CLI is not installed."""
     with patch("shutil.which", return_value=None):
         result = runner.invoke(speedtest_group, ["internet"])
-        assert "Error: Ookla speedtest CLI is not installed" in result.output
+        assert "ERROR: Ookla speedtest CLI is not installed" in result.output
         assert "brew install speedtest --force" in result.output
         assert "https://www.speedtest.net/apps/cli" in result.output
 
