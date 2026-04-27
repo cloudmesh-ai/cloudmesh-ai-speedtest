@@ -9,6 +9,32 @@ It supports multiple transfer protocols:
 - SFTP (SSH File Transfer Protocol)
 - Rsync (Remote Sync)
 
+## Installation
+
+### Recommended: Using pipx
+For the best experience with CLI tools, use `pipx` to install `cloudmesh-ai-speedtest` in an isolated environment.
+
+``` bash
+pipx install cloudmesh-ai-speedtest
+```
+
+To install from a local directory:
+``` bash
+pipx install .
+```
+
+### Using pip
+If you prefer a standard installation in your current environment:
+
+``` bash
+pip install cloudmesh-ai-speedtest
+```
+
+To install from a local directory:
+``` bash
+pip install .
+```
+
 ## Usage Examples
 
 1. Run a speed test to a host using default SCP (50MB test):

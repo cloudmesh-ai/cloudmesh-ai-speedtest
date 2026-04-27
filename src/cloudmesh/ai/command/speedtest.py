@@ -84,13 +84,7 @@ from cloudmesh.ai.common.io import path_expand
 from cloudmesh.ai.common.sys import systeminfo
 from cloudmesh.ai.common.telemetry import Telemetry
 
-# Import Rich components for the table
-from rich.console import Console
-from rich.table import Table
-from rich import box
-
-# Initialize Rich console
-console = Console()
+from cloudmesh.ai.common.io import console
 
 # Initialize Logger
 logger = get_logger("speedtest")
@@ -184,28 +178,25 @@ def internet_cmd(yes):
     Conduct an internet speed test using the Ookla speedtest CLI.
     """
     if shutil.which("speedtest") is None:
-        click.secho("\nError: Ookla speedtest CLI is not installed.", fg="red")
-        click.echo("\nTo install it, run the following commands:")
-        click.echo("--------------------------------------------------")
-        click.echo("brew tap teamookla/speedtest")
-        click.echo("brew update")
-        click.echo("# brew uninstall speedtest --force")
-        click.echo("# brew uninstall speedtest-cli --force")
-        click.echo("brew install speedtest --force")
-        click.echo("--------------------------------------------------")
-        click.echo("\nFor more information, visit: https://www.speedtest.net/apps/cli")
+        console.error("Ookla speedtest CLI is not installed.")
+        console.print("\nTo install it, run the following commands:")
+        console.banner("Installation Steps", 
+            "brew tap teamookla/speedtest\n"
+            "brew update\n"
+            "brew install speedtest --force")
+        console.print("\nFor more information, visit: https://www.speedtest.net/apps/cli")
         return
 
     if yes or click.confirm("\nWould you like to conduct the speedtest with the Ookla program?", default=False):
         try:
-            # Run speedtest and stream output to console
-            result = subprocess.run(["speedtest"], capture_output=False, text=True)
-            if result.returncode != 0:
-                click.secho(f"\nSpeedtest failed with exit code {result.returncode}", fg="red")
+            with console.status("Running Ookla speedtest..."):
+                result = subprocess.run(["speedtest"], capture_output=False, text=True)
+                if result.returncode != 0:
+                    console.error(f"Speedtest failed with exit code {result.returncode}")
         except Exception as e:
-            click.secho(f"\nAn error occurred while running speedtest: {e}", fg="red")
+            console.error(f"An error occurred while running speedtest: {e}")
     else:
-        click.echo("\nSpeedtest cancelled.")
+        console.msg("Speedtest cancelled.")
 
 
 @speedtest_group.command(name="run")  # Changed from 'ssh' to 'run'
@@ -245,10 +236,11 @@ def run_cmd(host, size, user, copy_method):
         except Exception as te:
             logger.debug(f"Telemetry start failed: {te}")
 
-        logger.info(f"Generating {size}MB test data...")
-        generate_fast_dummy_file(test_file, size)
+        with console.status(f"Preparing and transferring {size}MB to {host}..."):
+            logger.info(f"Generating {size}MB test data...")
+            generate_fast_dummy_file(test_file, size)
 
-        logger.info(f"Transferring to {host} via {copy_method}...")
+            logger.info(f"Transferring to {host} via {copy_method}...")
 
         if copy_method == "scp":
             cmd = ["scp"] + ssh_opts + [str(test_file), f"{target}:{remote_path}"]
@@ -319,23 +311,20 @@ def run_cmd(host, size, user, copy_method):
         with open(history_file, "w") as f:
             json.dump(history, f, indent=4)
 
-        table = Table(
-            title=f"Speedtest Results: {host} ({copy_method})",
-            show_header=True,
-            header_style="bold magenta",
-            box=box.ROUNDED,
+        # Summary for the banner
+        summary = (
+            f"Throughput: {speed_mbytes:.2f} MB/s ({speed_mbits:.2f} Mbps)\n"
+            f"Projected 1GB: {proj_1gb_total_seconds:.2f}s ({time_breakdown})"
         )
-        table.add_column("Metric", style="blue")
-        table.add_column("Value", style="black")
+        console.banner(f"Speedtest Results: {host} ({copy_method})", summary)
 
-        table.add_row("Method", copy_method.upper())
-        table.add_row("Sample Size", f"{size} MB")
-        table.add_row("Throughput", f"{speed_mbytes:.2f} MB/s ({speed_mbits:.2f} Mbps)")
-        table.add_row(
-            "Projected 1GB", f"{proj_1gb_total_seconds:.2f}s ({time_breakdown})"
-        )
-
-        console.print("\n", table)
+        data = [
+            ("Method", copy_method.upper()),
+            ("Sample Size", f"{size} MB"),
+            ("Throughput", f"{speed_mbytes:.2f} MB/s ({speed_mbits:.2f} Mbps)"),
+            ("Projected 1GB", f"{proj_1gb_total_seconds:.2f}s ({time_breakdown})"),
+        ]
+        console.table(["Metric", "Value"], data)
 
         subprocess.run(
             ["ssh"] + ssh_opts + [target, f"rm {remote_path}"],
@@ -351,7 +340,7 @@ def run_cmd(host, size, user, copy_method):
             telemetry.fail(error=str(e))
         except Exception as te:
             logger.debug(f"Telemetry fail failed: {te}")
-        click.secho(f"Execution failed: {e}", fg="red")
+        console.error(f"Execution failed: {e}")
     finally:
         if test_file.exists():
             test_file.unlink()
@@ -382,7 +371,7 @@ def predict_cmd(host, path, copy_method):
     """
     history_file = get_history_path()
     if not history_file.exists():
-        click.secho(f"No history found. Run 'speedtest run HOST' first.", fg="yellow")
+        console.warning(f"No history found. Run 'speedtest run HOST' first.")
         return
 
     with open(history_file, "r") as f:
@@ -390,37 +379,26 @@ def predict_cmd(host, path, copy_method):
 
     history_key = f"{host}:{copy_method}"
     if history_key not in history:
-        click.secho(
-            f"No recorded speed for '{host}' using {copy_method} in history.",
-            fg="yellow",
-        )
+        console.warning(f"No recorded speed for '{host}' using {copy_method} in history.")
         return
 
     speed_mbytes = history[history_key]["speed_mbytes"]
     total_mb = get_path_size_mb(path)
 
     if total_mb == 0:
-        click.secho(f"Path '{path}' is empty.", fg="yellow")
+        console.warning(f"Path '{path}' is empty.")
         return
 
     total_seconds = total_mb / speed_mbytes
     time_display = format_hms(total_seconds)
 
-    table = Table(
-        title=f"Transfer Prediction for {host} ({copy_method})",
-        show_header=True,
-        header_style="bold magenta",
-        box=box.ROUNDED,
-    )
-    table.add_column("Parameter", style="blue")
-    table.add_column("Value", style="black")
-
-    table.add_row("Source Path", str(path))
-    table.add_row("Total Size", f"{total_mb:.2f} MB")
-    table.add_row("Stored Speed", f"{speed_mbytes:.2f} MB/s")
-    table.add_row("Estimated Time", f"{total_seconds:.2f}s ({time_display})")
-
-    console.print("\n", table)
+    data = [
+        ("Source Path", str(path)),
+        ("Total Size", f"{total_mb:.2f} MB"),
+        ("Stored Speed", f"{speed_mbytes:.2f} MB/s"),
+        ("Estimated Time", f"{total_seconds:.2f}s ({time_display})"),
+    ]
+    console.table(["Parameter", "Value"], data, title=f"Transfer Prediction for {host} ({copy_method})")
 
 
 entry_point = speedtest_group
