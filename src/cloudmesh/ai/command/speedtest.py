@@ -79,7 +79,7 @@ from datetime import datetime
 from pathlib import Path
 
 from cloudmesh.ai.common.stopwatch import StopWatch
-from cloudmesh.ai.common.logging import get_logger
+from cloudmesh.ai.common.logging_utils import get_contextual_logger
 from cloudmesh.ai.common.io import path_expand
 from cloudmesh.ai.common.sys import systeminfo
 from cloudmesh.ai.common.telemetry import Telemetry
@@ -87,7 +87,7 @@ from cloudmesh.ai.common.telemetry import Telemetry
 from cloudmesh.ai.common.io import console
 
 # Initialize Logger
-logger = get_logger("speedtest")
+logger = get_contextual_logger("speedtest")
 
 # Initialize Telemetry
 telemetry = Telemetry("speedtest")
@@ -124,7 +124,7 @@ def get_history_path():
 
 def get_path_size_mb(path_str):
     """Calculates total size of a file or directory in Megabytes."""
-    p = Path(path_str).expanduser().resolve()
+    p = Path(path_expand(path_str)).resolve()
     if not p.exists():
         return 0
     if p.is_file():
